@@ -1,177 +1,159 @@
 """
-Script para analisar e visualizar os resultados do sistema adaptativo de labirintos.
-Gera gráficos simples usando matplotlib (se disponível) ou apenas estatísticas em texto.
+Analisador de Resultados - Sistema Adaptativo de Labirintos
+Script simples para visualizar resultados do treinamento
 """
 
 import csv
 import os
+from typing import Dict, List
 
-try:
-    import matplotlib.pyplot as plt
-    HAS_MATPLOTLIB = True
-except ImportError:
-    HAS_MATPLOTLIB = False
-    print("Matplotlib não disponível. Apenas estatísticas em texto serão geradas.")
-
-
-def ler_log_csv(arquivo='adaptive_log.csv'):
-    """Lê o arquivo CSV de log e retorna os dados."""
-    if not os.path.exists(arquivo):
-        print(f"Arquivo {arquivo} não encontrado. Execute primeiro adaptive_maze.py")
-        return None
+def carregar_resultados(arquivo_csv: str) -> List[Dict]:
+    """Carrega resultados do arquivo CSV"""
+    if not os.path.exists(arquivo_csv):
+        print(f"❌ Arquivo {arquivo_csv} não encontrado!")
+        print("Execute primeiro: python Labirinto_adaptativo.py")
+        return []
     
-    dados = []
-    with open(arquivo, 'r', encoding='utf-8') as f:
+    resultados = []
+    with open(arquivo_csv, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            dados.append({
-                'round': int(row['round']),
-                'width': int(row['width']),
-                'height': int(row['height']),
-                'branching': float(row['branching']),
-                'astar_success': float(row['astar_success']),
-                'astar_median_steps': float(row['astar_median_steps']),
-                'q_success': float(row['q_success']),
-                'q_median_steps': float(row['q_median_steps'])
-            })
-    return dados
+        for linha in reader:
+            # Converte valores numéricos
+            for chave in linha:
+                try:
+                    linha[chave] = float(linha[chave])
+                except ValueError:
+                    pass  # Mantém como string se não conseguir converter
+            resultados.append(linha)
+    
+    return resultados
 
-
-def analisar_estatisticas(dados):
-    """Calcula estatísticas descritivas dos dados."""
-    if not dados:
+def analisar_progresso(resultados: List[Dict]):
+    """Analisa o progresso do treinamento"""
+    if not resultados:
         return
     
-    print("\n" + "="*60)
-    print("ANÁLISE DE RESULTADOS - SISTEMA ADAPTATIVO DE LABIRINTOS")
-    print("="*60)
+    print("="*70)
+    print("ANÁLISE DOS RESULTADOS - SISTEMA ADAPTATIVO DE LABIRINTOS")
+    print("="*70)
     
-    # Estatísticas gerais
-    rounds = [d['round'] for d in dados]
-    branching = [d['branching'] for d in dados]
-    astar_steps = [d['astar_median_steps'] for d in dados]
-    q_steps = [d['q_median_steps'] for d in dados]
-    astar_success = [d['astar_success'] for d in dados]
-    q_success = [d['q_success'] for d in dados]
+    print(f"\n📊 Total de rodadas: {len(resultados)}")
     
-    print(f"\nTotal de rounds: {len(dados)}")
-    print(f"\n--- Parâmetros do Labirinto ---")
-    print(f"Branching - Mín: {min(branching):.4f}, Máx: {max(branching):.4f}, "
-          f"Média: {sum(branching)/len(branching):.4f}")
-    print(f"Tamanho - Mín: {min([d['width'] for d in dados])}x{min([d['height'] for d in dados])}, "
-          f"Máx: {max([d['width'] for d in dados])}x{max([d['height'] for d in dados])}")
+    # Primeira e última rodada
+    primeira = resultados[0]
+    ultima = resultados[-1]
     
-    print(f"\n--- Desempenho do Agente A* (Ótimo) ---")
-    print(f"Taxa de sucesso média: {sum(astar_success)/len(astar_success):.2%}")
-    print(f"Passos médios: {sum(astar_steps)/len(astar_steps):.1f}")
-    print(f"Passos - Mín: {min(astar_steps):.1f}, Máx: {max(astar_steps):.1f}")
+    print(f"\n📈 EVOLUÇÃO:")
+    print(f"   Parâmetros iniciais: {primeira['width']:.0f}x{primeira['height']:.0f}, branching={primeira['branching']:.3f}")
+    print(f"   Parâmetros finais:   {ultima['width']:.0f}x{ultima['height']:.0f}, branching={ultima['branching']:.3f}")
     
-    print(f"\n--- Desempenho do Agente Q-Learning ---")
-    print(f"Taxa de sucesso média: {sum(q_success)/len(q_success):.2%}")
-    print(f"Passos médios: {sum(q_steps)/len(q_steps):.1f}")
-    print(f"Passos - Mín: {min(q_steps):.1f}, Máx: {max(q_steps):.1f}")
+    # Taxa de sucesso do Q-Learning
+    sucessos_q = [r['q_success'] for r in resultados]
+    sucessos_astar = [r['astar_success'] for r in resultados]
     
-    # Análise de adaptatividade
-    print(f"\n--- Análise de Adaptatividade ---")
-    if len(dados) > 1:
-        branching_inicial = branching[0]
-        branching_final = branching[-1]
-        mudanca = ((branching_final - branching_inicial) / branching_inicial) * 100 if branching_inicial > 0 else 0
-        print(f"Mudança no branching: {mudanca:+.1f}%")
+    print(f"\n🎯 TAXA DE SUCESSO:")
+    print(f"   Q-Learning inicial: {sucessos_q[0]:.1%}")
+    print(f"   Q-Learning final:   {sucessos_q[-1]:.1%}")
+    print(f"   Melhor Q-Learning:  {max(sucessos_q):.1%}")
+    print(f"   A* (oráculo):       {sucessos_astar[0]:.1%} (sempre 100%)")
+    
+    # Razão de eficiência
+    razoes_q = [r['q_median_ratio'] for r in resultados if r['q_median_ratio'] > 0]
+    if razoes_q:
+        print(f"\n⚡ EFICIÊNCIA (Passos Q-Learning / Passos Ótimos):")
+        print(f"   Razão inicial: {razoes_q[0]:.2f}x")
+        print(f"   Razão final:   {razoes_q[-1]:.2f}x")
+        print(f"   Melhor razão:  {min(razoes_q):.2f}x")
+    
+    # Epsilon (exploração)
+    epsilons = [r['q_epsilon'] for r in resultados]
+    print(f"\n🔍 EXPLORAÇÃO (Epsilon):")
+    print(f"   Inicial: {epsilons[0]:.3f}")
+    print(f"   Final:   {epsilons[-1]:.3f}")
+    print(f"   Episódios treinados: {ultima['q_episodes_trained']:.0f}")
+    
+    # Estatísticas por quartis
+    n = len(resultados)
+    quartis = [n//4, n//2, 3*n//4]
+    indices = ["25%", "50%", "75%", "100%"]
+    
+    print(f"\n📊 PROGRESSO POR QUARTIS:")
+    for i, (q_idx, idx_name) in enumerate(zip([0] + quartis, indices)):
+        r = resultados[q_idx]
+        print(f"   {idx_name:4s}: Taxa={r['q_success']:.1%}, "
+              f"Razão={r['q_median_ratio']:.2f if r['q_median_ratio'] > 0 else 'N/A':>4s}, "
+              f"Epsilon={r['q_epsilon']:.3f}")
+
+def criar_grafico_simples(resultados: List[Dict]):
+    """Cria gráfico simples usando ASCII (se matplotlib disponível)"""
+    try:
+        import matplotlib.pyplot as plt
         
-        # Verifica se houve estabilização
-        ultimos_10 = branching[-10:] if len(branching) >= 10 else branching
-        variacao_final = max(ultimos_10) - min(ultimos_10)
-        print(f"Variação nos últimos rounds: {variacao_final:.4f}")
-        if variacao_final < 0.05:
-            print("[OK] Sistema parece ter estabilizado!")
-        else:
-            print(">> Sistema ainda esta ajustando parametros")
-    
-    print("\n" + "="*60)
-
-
-def plotar_graficos(dados):
-    """Gera gráficos de visualização dos resultados."""
-    if not HAS_MATPLOTLIB:
-        print("\nMatplotlib não disponível. Instale com: pip install matplotlib")
-        return
-    
-    if not dados:
-        return
-    
-    rounds = [d['round'] for d in dados]
-    branching = [d['branching'] for d in dados]
-    astar_steps = [d['astar_median_steps'] for d in dados]
-    q_steps = [d['q_median_steps'] for d in dados]
-    astar_success = [d['astar_success'] for d in dados]
-    q_success = [d['q_success'] for d in dados]
-    
-    # Criar figura com subplots
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle('Análise do Sistema Adaptativo de Labirintos', fontsize=14, fontweight='bold')
-    
-    # Gráfico 1: Branching ao longo do tempo
-    axes[0, 0].plot(rounds, branching, 'b-', linewidth=2, marker='o', markersize=4)
-    axes[0, 0].set_xlabel('Round')
-    axes[0, 0].set_ylabel('Branching')
-    axes[0, 0].set_title('Evolução do Parâmetro Branching')
-    axes[0, 0].grid(True, alpha=0.3)
-    
-    # Gráfico 2: Passos médios (A* vs Q-Learning)
-    axes[0, 1].plot(rounds, astar_steps, 'g-', linewidth=2, marker='s', markersize=4, label='A* (Ótimo)')
-    axes[0, 1].plot(rounds, q_steps, 'r-', linewidth=2, marker='^', markersize=4, label='Q-Learning')
-    axes[0, 1].set_xlabel('Round')
-    axes[0, 1].set_ylabel('Passos Médios')
-    axes[0, 1].set_title('Desempenho: Passos para Resolver')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Gráfico 3: Taxa de sucesso
-    axes[1, 0].plot(rounds, astar_success, 'g-', linewidth=2, marker='s', markersize=4, label='A*')
-    axes[1, 0].plot(rounds, q_success, 'r-', linewidth=2, marker='^', markersize=4, label='Q-Learning')
-    axes[1, 0].set_xlabel('Round')
-    axes[1, 0].set_ylabel('Taxa de Sucesso')
-    axes[1, 0].set_title('Taxa de Sucesso ao Longo do Tempo')
-    axes[1, 0].set_ylim([0, 1.1])
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # Gráfico 4: Relação Branching vs Desempenho
-    axes[1, 1].scatter(branching, q_steps, alpha=0.6, s=50, c=rounds, cmap='viridis')
-    axes[1, 1].set_xlabel('Branching')
-    axes[1, 1].set_ylabel('Passos (Q-Learning)')
-    axes[1, 1].set_title('Relação: Dificuldade vs Desempenho')
-    axes[1, 1].grid(True, alpha=0.3)
-    cbar = plt.colorbar(axes[1, 1].collections[0], ax=axes[1, 1])
-    cbar.set_label('Round')
-    
-    plt.tight_layout()
-    
-    # Salvar figura
-    output_file = 'analise_resultados.png'
-    plt.savefig(output_file, dpi=150, bbox_inches='tight')
-    print(f"\n[OK] Graficos salvos em: {output_file}")
-    
-    # Mostrar gráficos
-    plt.show()
-
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+        fig.suptitle('Análise do Treinamento Adaptativo', fontsize=14, fontweight='bold')
+        
+        rodadas = [r['round'] + 1 for r in resultados]
+        
+        # Taxa de sucesso
+        sucessos_q = [r['q_success'] for r in resultados]
+        ax1.plot(rodadas, sucessos_q, 'b-o', linewidth=2, markersize=4)
+        ax1.set_title('Taxa de Sucesso Q-Learning')
+        ax1.set_xlabel('Rodada')
+        ax1.set_ylabel('Taxa de Sucesso')
+        ax1.set_ylim([0, 1.1])
+        ax1.grid(True, alpha=0.3)
+        
+        # Razão de eficiência
+        razoes = [r['q_median_ratio'] for r in resultados if r['q_median_ratio'] > 0]
+        rodadas_ratio = rodadas[:len(razoes)]
+        ax2.plot(rodadas_ratio, razoes, 'r-s', linewidth=2, markersize=4)
+        ax2.set_title('Eficiência Relativa')
+        ax2.set_xlabel('Rodada')
+        ax2.set_ylabel('Q-Learning / A*')
+        ax2.grid(True, alpha=0.3)
+        
+        # Epsilon
+        epsilons = [r['q_epsilon'] for r in resultados]
+        ax3.plot(rodadas, epsilons, 'g-^', linewidth=2, markersize=4)
+        ax3.set_title('Epsilon (Exploração)')
+        ax3.set_xlabel('Rodada')
+        ax3.set_ylabel('Epsilon')
+        ax3.grid(True, alpha=0.3)
+        
+        # Branching
+        branchings = [r['branching'] for r in resultados]
+        ax4.plot(rodadas, branchings, 'm-d', linewidth=2, markersize=4)
+        ax4.set_title('Parâmetro Branching')
+        ax4.set_xlabel('Rodada')
+        ax4.set_ylabel('Branching')
+        ax4.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
+        
+        print("\n📈 Gráfico salvo com matplotlib!")
+        
+    except ImportError:
+        print("\n📊 Matplotlib não disponível. Execute: pip install matplotlib")
+        print("   Mas você pode ver a análise textual acima.")
 
 def main():
-    """Função principal."""
-    dados = ler_log_csv()
+    """Função principal"""
+    arquivo = 'adaptive_results_improved.csv'
     
-    if dados:
-        analisar_estatisticas(dados)
+    print("🔍 Carregando resultados...")
+    resultados = carregar_resultados(arquivo)
+    
+    if resultados:
+        analisar_progresso(resultados)
+        criar_grafico_simples(resultados)
         
-        if HAS_MATPLOTLIB:
-            resposta = input("\nDeseja gerar gráficos? (s/n): ").strip().lower()
-            if resposta == 's':
-                plotar_graficos(dados)
-        else:
-            print("\nPara gerar gráficos, instale matplotlib: pip install matplotlib")
-
+        print("\n" + "="*70)
+        print("✅ Análise concluída!")
+        print("="*70)
+    else:
+        print("\n❌ Não foi possível carregar os resultados.")
+        print("   Execute o treinamento primeiro: python Labirinto_adaptativo.py")
 
 if __name__ == "__main__":
     main()
-
